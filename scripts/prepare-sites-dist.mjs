@@ -4,6 +4,9 @@ import { dirname, extname, join, relative } from "node:path";
 const root = process.cwd();
 const appOutput = join(root, ".next/server/app");
 const dist = join(root, "dist");
+const client = join(dist, "client");
+const server = join(dist, "server");
+const pages = new Map();
 
 async function exists(path) {
   try {
@@ -17,9 +20,16 @@ async function exists(path) {
 function pageTarget(source) {
   const rel = relative(appOutput, source);
   if (rel === "index.html") {
-    return join(dist, "index.html");
+    return join(client, "index.html");
   }
-  return join(dist, rel.replace(/\.html$/, "/index.html"));
+  return join(client, rel.replace(/\.html$/, "/index.html"));
+}
+
+function pageRoute(source) {
+  const rel = relative(appOutput, source).replace(/\.html$/, "");
+  if (rel === "index") return "/";
+  if (rel === "_not-found") return "/404";
+  return `/${rel}`;
 }
 
 function rewriteImageOptimizerUrls(html) {
@@ -43,12 +53,15 @@ async function walk(dir, visitor) {
 }
 
 await rm(dist, { recursive: true, force: true });
-await mkdir(dist, { recursive: true });
+await mkdir(client, { recursive: true });
+await mkdir(server, { recursive: true });
+await mkdir(join(dist, ".openai"), { recursive: true });
 
-await cp(join(root, ".next/static"), join(dist, "_next/static"), { recursive: true });
+await cp(join(root, ".next/static"), join(client, "_next/static"), { recursive: true });
+await cp(join(root, ".openai/hosting.json"), join(dist, ".openai/hosting.json"));
 
 if (await exists(join(root, "public/assets/images/hero-sports-distribution.png"))) {
-  await cp(join(root, "public"), dist, { recursive: true });
+  await cp(join(root, "public"), client, { recursive: true });
 }
 
 await walk(appOutput, async (source) => {
@@ -57,15 +70,97 @@ await walk(appOutput, async (source) => {
   if (extension === ".html") {
     const target = pageTarget(source);
     const html = rewriteImageOptimizerUrls(await readFile(source, "utf8"));
+    pages.set(pageRoute(source), html);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, html);
   }
 
   if (source.endsWith(".txt.body") || source.endsWith(".xml.body")) {
     const rel = relative(appOutput, source).replace(/\.body$/, "");
-    const target = join(dist, rel);
+    const target = join(client, rel);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, await readFile(source));
   }
 });
 
+const workerSource = `const PAGES = new Map(${JSON.stringify([...pages.entries()])});
+
+const MIME_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".woff2": "font/woff2",
+  ".pdf": "application/pdf",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+function htmlResponse(html, init = {}) {
+  return new Response(html, {
+    ...init,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=0, must-revalidate",
+      ...(init.headers || {}),
+    },
+  });
+}
+
+function jsonResponse(body, init = {}) {
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...(init.headers || {}),
+    },
+  });
+}
+
+function routeFor(pathname) {
+  if (pathname === "/index.html") return "/";
+  if (pathname.endsWith("/index.html")) return pathname.slice(0, -"/index.html".length) || "/";
+  return pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+}
+
+async function staticAsset(request, env) {
+  if (!env?.ASSETS?.fetch) return null;
+  const response = await env.ASSETS.fetch(request);
+  return response.status === 404 ? null : response;
+}
+
+export default {
+  async fetch(request, env = {}) {
+    const url = new URL(request.url);
+    const route = routeFor(url.pathname);
+
+    if (route === "/api/forms/contact" || route === "/api/forms/reseller") {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed" }, { status: 405, headers: { allow: "POST" } });
+      }
+      return jsonResponse({ ok: true, message: "Preview submission received." });
+    }
+
+    if (route.startsWith("/_next/") || route.startsWith("/assets/") || route.startsWith("/catalogues/") || route === "/robots.txt" || route === "/sitemap.xml") {
+      const asset = await staticAsset(request, env);
+      if (asset) return asset;
+    }
+
+    const html = PAGES.get(route);
+    if (html) return htmlResponse(html);
+
+    const asset = await staticAsset(request, env);
+    if (asset) return asset;
+
+    return htmlResponse(PAGES.get("/404") || "Not found", { status: 404 });
+  },
+};
+`;
+
+await writeFile(join(server, "index.js"), workerSource);
