@@ -17,6 +17,28 @@ export interface DownloadableCatalogue {
   url: string;
 }
 
+export interface ProductCategory {
+  title: string;
+  slug: string;
+  description: string;
+  image: string;
+  brandSlugs: string[];
+  highlights: string[];
+}
+
+export interface ProductLine {
+  name: string;
+  slug: string;
+  categorySlug: string;
+  brandSlug: string;
+  summary: string;
+  description: string;
+  image: string;
+  useCases: string[];
+  categoryModules: string[];
+  catalogue: DownloadableCatalogue;
+}
+
 export interface Brand {
   name: string;
   slug: string;

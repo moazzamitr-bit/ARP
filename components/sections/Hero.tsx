@@ -8,6 +8,7 @@ export function PageHero({
   body,
   image,
   label,
+  breadcrumb,
   primary,
   secondary,
   className,
@@ -16,6 +17,7 @@ export function PageHero({
   body: string;
   image?: string;
   label?: string;
+  breadcrumb?: string;
   primary?: { label: string; href: string };
   secondary?: { label: string; href: string };
   className?: string;
@@ -23,7 +25,7 @@ export function PageHero({
   return (
     <section className={cn("page-hero", className)}>
       <Container>
-        <div className="breadcrumb">Home / {title.split(" ")[0]}</div>
+        <div className="breadcrumb">Home / {breadcrumb ?? title.split(" ")[0]}</div>
         <div className="hero-grid">
           <div className="hero-copy">
             {label ? <p className="eyebrow">{label}</p> : null}

@@ -21,9 +21,9 @@ const footerColumns = [
     title: "Brands",
     links: [
       { label: "All Brands", href: "/brands" },
-      { label: "Racquet Sports", href: "/brands?category=Racquet%20Sports" },
-      { label: "Cricket", href: "/brands?category=Cricket" },
-      { label: "Sports Goods", href: "/brands?category=Sports%20Goods" },
+      { label: "Product Categories", href: "/products" },
+      { label: "Racquet Sports", href: "/products/racquet-sports" },
+      { label: "Cricket", href: "/products/cricket" },
     ],
   },
   {

@@ -6,6 +6,7 @@ import { LinkButton } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { Container, Section } from "@/components/ui/Section";
 import { brands, getBrand } from "@/content/brands";
+import { productCategories } from "@/content/products";
 import { site } from "@/content/site";
 import { pageMetadata } from "@/lib/metadata";
 
@@ -22,6 +23,7 @@ export function generateMetadata({ params }: { params: { slug: string } }) {
 export default function BrandDetailPage({ params }: { params: { slug: string } }) {
   const brand = getBrand(params.slug);
   if (!brand) notFound();
+  const linkedCategory = productCategories.find((category) => category.brandSlugs.includes(brand.slug));
 
   return (
     <>
@@ -83,7 +85,7 @@ export default function BrandDetailPage({ params }: { params: { slug: string } }
             <h2>Product Categories</h2>
             <div className="category-list">
               {brand.categories.map((category) => (
-                <a key={category} href="/contact#where-to-buy">
+                <a key={category} href={linkedCategory ? `/products/${linkedCategory.slug}` : "/products"}>
                   {category}
                   <ExternalLink size={15} aria-hidden="true" />
                 </a>
